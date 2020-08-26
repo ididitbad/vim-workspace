@@ -61,21 +61,52 @@ function! s:MakeWorkspace(workspace_save_session)
   endif
 endfunction
 
-function! s:FindOrNew(filename)
-  let l:fnr = bufnr(a:filename)
-  for tabnr in range(1, tabpagenr("$"))
-    for bufnr in tabpagebuflist(tabnr)
-      if (bufnr == l:fnr)
-        execute 'tabn ' . tabnr
-        call win_gotoid(win_findbuf(l:fnr)[0])
-        return
-      endif
+function! s:FindOrNew(filenames)
+  let l:number_of_files = len(a:filenames)
+  if (l:number_of_files == 0)
+    return
+  endif
+  let l:fnr = -1
+  let l:tabnr = -1
+  let l:break_flag = 0
+  let l:found_filenames = []
+  for filename in a:filenames
+    for tabnr in range(1, tabpagenr("$"))
+      for bufnr in tabpagebuflist(tabnr)
+        if (bufnr == bufnr(filename))
+          if (l:tabnr == -1)
+            let l:tabnr = tabnr
+          endif
+          call add(l:found_filenames, filename)
+        endif
+      endfor
     endfor
   endfor
+  if (len(l:found_filenames) == len(a:filenames))
+    execute 'tabn ' . l:tabnr
+    call win_gotoid(win_findbuf(bufnr(a:filenames[0]))[0])
+    return
+  endif
   if g:workspace_create_new_tabs
     tabnew
   endif
-  execute 'buffer ' . l:fnr
+  let l:split = index(v:argv, '-o')
+  let l:vsplit = index(v:argv, '-O')
+  let l:first = 0
+  if (l:split != -1 || l:vsplit != -1)
+    for filename in a:filenames
+      if (index(l:found_filenames, filename) == -1)
+        if (l:first == 0)
+          let l:first = 1
+          execute 'buffer ' . bufnr(filename)
+        elseif (l:split > l:vsplit)
+          execute 'sbuffer ' . bufnr(filename)
+        else
+          execute 'vertical sbuffer ' . bufnr(filename)
+        endif
+      endif
+    endfor
+  endif
 endfunction
 
 function! s:CloseHiddenBuffers()
@@ -126,11 +157,11 @@ function! s:LoadWorkspace()
 
   if s:WorkspaceExists()
     let s:workspace_save_session = 1
-    let l:filename = expand(@%)
+    let l:filenames = argv()
     if g:workspace_nocompatible | set nocompatible | endif
     execute 'source ' . escape(s:GetSessionName(), '%')
     call s:ConfigureWorkspace()
-    call s:FindOrNew(l:filename)
+    call s:FindOrNew(l:filenames)
   else
     if g:workspace_autocreate
       call s:ToggleWorkspace()
